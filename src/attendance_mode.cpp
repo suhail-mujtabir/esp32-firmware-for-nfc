@@ -9,6 +9,7 @@ static AttendanceState currentState = ATT_NO_EVENT;
 static String activeEventId = "";
 static String activeEventName = "";
 static String lastCheckedInStudent = ""; // Store last check-in for display
+static int lastCheckInStatus = 0; // Store HTTP status code
 
 // ==========================================
 // INITIALIZATION
@@ -40,7 +41,12 @@ void runAttendanceMode(Adafruit_SSD1306& display, String cardUid) {
       displayWelcome(display, lastCheckedInStudent);
       delay(CHECKIN_SUCCESS_DISPLAY);
     } else {
-      displayAttendanceError(display, "Check-in failed");
+      // Check error type
+      if (lastCheckInStatus == 409) {
+        displayAttendanceError(display, "Already checked in");
+      } else {
+        displayAttendanceError(display, "Check-in failed");
+      }
       delay(2000);
     }
     
@@ -54,31 +60,42 @@ void runAttendanceMode(Adafruit_SSD1306& display, String cardUid) {
 // BUTTON HANDLING
 // ==========================================
 
-void handleButtonInAttendance(Adafruit_SSD1306& display, bool isLongPress, bool isDoubleTap, bool isSingleTap) {
+void handleFetchButton(Adafruit_SSD1306& display, bool isLongPress) {
   if (isLongPress) {
-    // Mode switch is handled in main.cpp
+    // Long press is for mode switch (handled in main.cpp)
+    Serial.println("Long press - mode switch");
     return;
   }
   
-  if (isDoubleTap && currentState == ATT_NO_EVENT) {
-    // Fetch event from API
+  // Short press - fetch event from API (only when no event loaded)
+  if (currentState == ATT_NO_EVENT) {
+    Serial.println("Fetch button pressed - getting active event");
     currentState = ATT_FETCHING_EVENT;
     displayFetchingEvent(display);
     
     if (fetchActiveEvent()) {
       currentState = ATT_READY;
       displayAttendanceReady(display, activeEventName);
+      Serial.println("Event loaded successfully");
     } else {
       currentState = ATT_NO_EVENT;
       displayNoEvent(display);
+      Serial.println("No active event found");
     }
+  } else {
+    Serial.println("Fetch button ignored - event already loaded");
   }
-  
-  if (isSingleTap && currentState == ATT_READY) {
-    // Clear event and go back to no event state
+}
+
+void handleClearButton(Adafruit_SSD1306& display) {
+  // Clear event only if we're in ready state
+  if (currentState == ATT_READY) {
+    Serial.println("Clear button pressed - removing event");
     clearActiveEvent();
     currentState = ATT_NO_EVENT;
     displayNoEvent(display);
+  } else {
+    Serial.println("Clear button ignored - no event to clear");
   }
 }
 
@@ -170,6 +187,16 @@ bool checkInCard(String cardUid) {
   
   Serial.println("Response code: " + String(httpCode));
   
+  // Store status for error handling
+  lastCheckInStatus = httpCode;
+  
+  if (httpCode == 409) {
+    // Already checked in
+    Serial.println("⚠️ Already checked in!");
+    http.end();
+    return false; // Return false to show error message
+  }
+  
   if (httpCode == 200) {
     String response = http.getString();
     Serial.println("Response: " + response);
@@ -226,8 +253,8 @@ void displayNoEvent(Adafruit_SSD1306& display) {
   display.setCursor(0, 10);
   display.println("No event found");
   display.println("");
-  display.println("Double press");
-  display.println("button to fetch");
+  display.println("Press button to");
+  display.println("fetch event");
   display.display();
 }
 

@@ -25,7 +25,11 @@
 #define OLED_RESET     -1   // No reset pin
 
 // Button
-#define BUTTON_PIN     25   // Mode switch / Manual refresh button (moved to avoid conflict)
+#define BUTTON_PIN     25   // Mode switch / Fetch event button
+#define BUTTON_CLEAR_PIN 26 // Clear event button (new)
+
+// Buzzer
+#define BUZZER_PIN     32   // Buzzer for card detection feedback
 
 // ==========================================
 // FIRMWARE CONFIGURATION
@@ -51,8 +55,8 @@
 #define API_TIMEOUT 10000            // 10 seconds HTTP timeout
 #define CARD_SENT_WAIT_TIME 5000     // Wait 5 seconds after sending card before accepting next
 #define BUTTON_LONG_PRESS 5000       // 5 seconds hold to switch modes
-#define BUTTON_DOUBLE_PRESS_WINDOW 500  // 500ms window for double tap detection
 #define CHECKIN_SUCCESS_DISPLAY 1000 // Display welcome message for 1 second
+#define BUZZER_DURATION 200          // Buzzer beep duration (ms)
 
 // Serial Debug
 #define SERIAL_BAUD 115200

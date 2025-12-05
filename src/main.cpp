@@ -38,9 +38,9 @@ unsigned long lastCardTime = 0;
 
 // Button state tracking
 unsigned long buttonPressStart = 0;
-unsigned long lastButtonPress = 0;
+unsigned long buttonClearPressStart = 0;
 bool buttonPressed = false;
-int buttonPressCount = 0;
+bool buttonClearPressed = false;
 
 // ==========================================
 // FUNCTION DECLARATIONS
@@ -48,6 +48,8 @@ int buttonPressCount = 0;
 
 void initSerial();
 void initButton();
+void initBuzzer();
+void buzzCard();
 void initRFID();
 void initOLED();
 void initWiFi();
@@ -59,7 +61,8 @@ void displaySending(String uid);
 void displayWaiting();
 void displayError(String line1, String line2);
 void displayReady();
-void checkButton();
+void checkFetchButton();
+void checkClearButton();
 void switchMode();
 
 // ==========================================
@@ -76,6 +79,7 @@ void setup() {
 
   initSerial();
   initButton();
+  initBuzzer();
   initOLED();
   initRFID();
   initWiFi();
@@ -89,8 +93,9 @@ void setup() {
 }
 
 void loop() {
-  // Check button first
-  checkButton();
+  // Check buttons first
+  checkFetchButton();
+  checkClearButton();
   
   // Check for new cards
   if (!rfid.PICC_IsNewCardPresent()) {
@@ -122,6 +127,9 @@ void loop() {
   Serial.println("Card Type: " + String(rfid.PICC_GetTypeName(rfid.PICC_GetType(rfid.uid.sak))));
   Serial.println("========================================\n");
   
+  // Beep buzzer for feedback
+  buzzCard();
+  
   // Handle card based on current mode
   if (currentMode == MODE_REGISTRATION) {
     handleCardDetected(cardUid);
@@ -148,7 +156,23 @@ void initSerial() {
 
 void initButton() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  Serial.println("✓ Button initialized (GPIO" + String(BUTTON_PIN) + ")");
+  pinMode(BUTTON_CLEAR_PIN, INPUT_PULLUP);
+  Serial.println("✓ Buttons initialized");
+  Serial.println("  GPIO" + String(BUTTON_PIN) + " - Fetch/Mode switch");
+  Serial.println("  GPIO" + String(BUTTON_CLEAR_PIN) + " - Clear event");
+}
+
+void initBuzzer() {
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  Serial.println("✓ Buzzer initialized");
+  Serial.println("  GPIO" + String(BUZZER_PIN) + " - Card detection feedback");
+}
+
+void buzzCard() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(BUZZER_DURATION);
+  digitalWrite(BUZZER_PIN, LOW);
 }
 
 void initOLED() {
@@ -438,22 +462,14 @@ void displayOnOLED(String line1, String line2, String line3) {
 // BUTTON HANDLING
 // ==========================================
 
-void checkButton() {
+void checkFetchButton() {
   bool buttonState = digitalRead(BUTTON_PIN) == LOW; // Active low (INPUT_PULLUP)
   
   if (buttonState && !buttonPressed) {
     // Button just pressed
     buttonPressed = true;
     buttonPressStart = millis();
-    
-    // Check for double tap
-    if (millis() - lastButtonPress < BUTTON_DOUBLE_PRESS_WINDOW) {
-      buttonPressCount = 2;
-    } else {
-      buttonPressCount = 1;
-    }
-    
-    lastButtonPress = millis();
+    Serial.println("Fetch button pressed");
   }
   
   if (!buttonState && buttonPressed) {
@@ -461,24 +477,53 @@ void checkButton() {
     buttonPressed = false;
     unsigned long pressDuration = millis() - buttonPressStart;
     
+    Serial.println("Fetch button released - duration: " + String(pressDuration) + "ms");
+    
     // Check for long press (mode switch)
     if (pressDuration >= BUTTON_LONG_PRESS) {
-      Serial.println("Long press detected - switching mode");
+      Serial.println("Long press detected (>= 5s) - switching mode");
       switchMode();
-      buttonPressCount = 0;
       return;
     }
     
-    // Handle short presses after a small delay to detect double tap
-    delay(BUTTON_DOUBLE_PRESS_WINDOW + 50);
-    
+    // Short press - handle based on mode
     if (currentMode == MODE_ATTENDANCE) {
-      bool isDoubleTap = (buttonPressCount == 2);
-      bool isSingleTap = (buttonPressCount == 1);
-      handleButtonInAttendance(display, false, isDoubleTap, isSingleTap);
+      Serial.println("Short press in attendance mode - fetching event");
+      handleFetchButton(display, false);
+    } else {
+      Serial.println("Short press in registration mode - ignored");
     }
     
-    buttonPressCount = 0;
+    delay(BUTTON_DEBOUNCE);
+  }
+}
+
+void checkClearButton() {
+  bool buttonState = digitalRead(BUTTON_CLEAR_PIN) == LOW; // Active low (INPUT_PULLUP)
+  
+  if (buttonState && !buttonClearPressed) {
+    // Button just pressed
+    buttonClearPressed = true;
+    buttonClearPressStart = millis();
+    Serial.println("Clear button pressed");
+  }
+  
+  if (!buttonState && buttonClearPressed) {
+    // Button just released
+    buttonClearPressed = false;
+    unsigned long pressDuration = millis() - buttonClearPressStart;
+    
+    Serial.println("Clear button released - duration: " + String(pressDuration) + "ms");
+    
+    // Only handle in attendance mode
+    if (currentMode == MODE_ATTENDANCE) {
+      Serial.println("Clear button - clearing event");
+      handleClearButton(display);
+    } else {
+      Serial.println("Clear button in registration mode - ignored");
+    }
+    
+    delay(BUTTON_DEBOUNCE);
   }
 }
 

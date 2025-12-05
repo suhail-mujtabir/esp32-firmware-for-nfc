@@ -24,7 +24,8 @@ enum AttendanceState {
 
 void initAttendanceMode();
 void runAttendanceMode(Adafruit_SSD1306& display, String cardUid);
-void handleButtonInAttendance(Adafruit_SSD1306& display, bool isLongPress, bool isDoubleTap, bool isSingleTap);
+void handleFetchButton(Adafruit_SSD1306& display, bool isLongPress);
+void handleClearButton(Adafruit_SSD1306& display);
 bool fetchActiveEvent();
 bool checkInCard(String cardUid);
 void clearActiveEvent();
